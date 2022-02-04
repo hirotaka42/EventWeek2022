@@ -1,0 +1,26 @@
+body {
+    background-color: #262829;
+}
+
+
+.container {
+    display: inline-flex;
+    width: 100%;
+    
+}
+
+/* 
+ side view 
+ */
+.side {
+    width: 25%;
+    display: flex;          /*アスペクト維持に必要*/
+    flex-direction: column; /*カラム表示*/
+}
+
+/* 
+main view 
+ */
+.main {
+    display: contents;      /*アスペクト比維持に必要*/
+  }

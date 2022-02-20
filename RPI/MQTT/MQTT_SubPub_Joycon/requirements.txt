@@ -1,0 +1,4 @@
+pygame~=2.1.2
+smbus2~=0.4.1
+paho-mqtt~=1.6.1
+RPi.GPIO~=0.7.0

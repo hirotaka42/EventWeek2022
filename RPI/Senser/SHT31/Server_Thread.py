@@ -20,8 +20,56 @@ bus.write_byte_data(i2c_addr, 0x21, 0x30)
 sleep(1)
 
 
-GLOBAL_SHT31 = [[0,0]]
+RINGSIZE = 10
+GLOBAL_buffer = [None for i in range(0, RINGSIZE)]
+GLOBAL_bottom = 0
 
+class RingBuffer:
+    """
+    リングバッファ クラス
+    Args : size(int) バッファサイズ
+
+    """
+    def __init__(self):
+        global GLOBAL_buffer 
+        global GLOBAL_bottom
+        global RINGSIZE
+        self.top = 0
+        GLOBAL_bottom = 0
+        self.size = RINGSIZE
+
+    def __len__(self):
+        global GLOBAL_bottom
+        return GLOBAL_bottom - self.top
+
+    def add(self, value):
+        global GLOBAL_buffer 
+        global GLOBAL_bottom
+        # 最新のボトム番地に 値を代入
+        GLOBAL_buffer[GLOBAL_bottom] = value
+        # ボトム を次に進め、バッファの総配列数 で ボトムの位置を割った値を ボトムに代入
+        # つまり バッファの配列数は常に一定になるので
+        # 初めにバッファを5サイズにすると N=(0+1)%5 という式になり
+        #  N=1,2,3,4,0,1,2..... のようなリングバッファとして使用できる、循環するボトムが完成する
+        GLOBAL_bottom = (GLOBAL_bottom + 1) % len(GLOBAL_buffer)
+
+    def get(self, index=None):
+        global GLOBAL_buffer 
+        if index is not None:
+            return GLOBAL_buffer[index]
+
+        value = GLOBAL_buffer[self.top]
+        self.top =(self.top + 1) % len(GLOBAL_buffer)
+        return value
+
+    def get_new_data(self, index=None):
+        global GLOBAL_buffer 
+        if index is not None:
+            return GLOBAL_buffer[index]
+
+        value = GLOBAL_buffer[self.top]
+        return value
+        
 
 def SHT31():
     """
@@ -44,20 +92,31 @@ def SHT31():
 
 def ThreadSHT31():
     """
-    Threadを使用しセンサデータを取得後 グローバル変数のList型GLOBAL_SHT31に格納していく
+    センサデータを取得後 グローバル変数のGLOBAL_buffer(実態はリングバッファ)に格納していく
     Args  : None
     Return: None
     概要   :
-    格納数が50件を超えたら40件削除する
-    list内容:
-    [[25.45, 27.67], [25.35, 27.56], ...]
+    辞書内容:
+    [{'SHT31': [23.05, 54.15]}, {'SHT31': [23.06, 54.02]}, ...]
     """
-    global GLOBAL_SHT31
+    global GLOBAL_bottom
+    global GLOBAL_buffer
+    rbuf = RingBuffer()
+    
     try:
         while True:
             print("ThreadSHT31():")
+            print(GLOBAL_buffer)
+            print(GLOBAL_bottom)
             data = SHT31()
-            GLOBAL_SHT31.append([round(data[0], 2),round(data[1], 2)])
+            value = {
+                "SHT31": [
+                    round(data[0], 2),
+                    round(data[1], 2)
+                    ]
+            }
+
+            rbuf.add(value)
             #print(GLOBAL_SHT31)
             sleep(2)
 
@@ -66,41 +125,40 @@ def ThreadSHT31():
         bus.write_byte_data(i2c_addr, 0x21, 0x30)
         print( "Finish!" )
 
+   
 
-
-    
-
-def getData():
+def getData()->dict:
     """
     GLOBAL_SHT31に格納してある最新のデータを取得する
     Args   : None
-    Return : list型
+    Return : 辞書型
     概要    :
-    関数ThreadSHT31で貯めたデータのうち一番新しいデータを取得し、list型で返却する
+    関数ThreadSHT31で貯めたデータのうち一番新しいデータを取得し、辞書型で返却する
     データ内容:
-    [25.42, 27.33]
+    {'SHT31': [23.06, 54.02]}
     """
-    global GLOBAL_SHT31
-    data = GLOBAL_SHT31
-
-    if data is None:
-        result = data[1]
-    else:
-        result = data[-1]
-    
+    global GLOBAL_buffer
+    global GLOBAL_bottom
+    # クラス RingBufferにおいて新規値を addした後, bottom値を次に切り替えてしまうため、最新の値はbottom値のひとつ前に格納されている
+    result = GLOBAL_buffer[GLOBAL_bottom-1]
+    print("-----------")
+    print("-----------")
+    print("Debug:" + "Func:getData()->" + '{}'.format(result))
+    print("-         -")
+    print("-----------")
     return result
         
-
 
 def app(environ, start_response):
     """
     最新の気温と湿度データをapiとしてJsonで配信する
     データ内容:
     {
-        "temperature": "25.56",
-        "pressure": "27.07"
+        "SHT31": {
+            "temperature": "23.06",
+            "pressure": "54.02"
+        }
     }
-
     """
     status = '200 OK'
     headers = [
@@ -108,16 +166,21 @@ def app(environ, start_response):
         ('Access-Control-Allow-Origin', '*'),
     ]
     start_response(status, headers)
-
+    
     data = getData()
-    sht31_dict = {'temperature': str(data[0]), 'pressure': str(data[1])}
+    sht31_dict = {
+        'SHT31': {
+            'temperature': str(data["SHT31"][0]), 
+            'pressure': str(data["SHT31"][1])
+        }
+    }
 
     return [json.dumps(sht31_dict, indent=int(_INFO_SUM), ensure_ascii=False).encode("utf-8")]
 
 def Thread_server_run():
     """
     3000番ポートでサーバを起動
-
+    
     """
     with make_server('', 3000, app) as httpd:
             print("Serving on port 3000...")

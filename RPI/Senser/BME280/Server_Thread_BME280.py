@@ -63,6 +63,10 @@ class RingBuffer:
         value = GLOBAL_buffer[self.top]
         return value
 
+    def view_all_data(self):
+        global GLOBAL_buffer 
+        print(GLOBAL_buffer)
+
 class BME280:
 
     def __init__(self):
@@ -216,30 +220,56 @@ class BME280:
         value = f"{var_h:.2f} "
         return value
 
-    def readData(self):
+    def readData(self)->dict:
         """
-        センサーのデータブロックからデータの読み込み
+        センサーのデータブロックからデータの読み込み,辞書型に整形し返却
+        Args : self
+        Return: BME280_dict
+        BME280_dict = {
+            'BME280': {
+                'temperature': str(tmp[0]), 
+                'pressure': str(tmp[1]),
+                'hum': str(tmp[2])
+            }
+        }
         """
 
         # デバッグ
         # print("def readData OK")
         data = []
+        tmp = []
         for i in range (0xF7, 0xF7+8):
             data.append(self.bus.read_byte_data(self.i2c_addr,i))
         pres_raw = (data[0] << 12) | (data[1] << 4) | (data[2] >> 4)
         temp_raw = (data[3] << 12) | (data[4] << 4) | (data[5] >> 4)
         hum_raw  = (data[6] << 8)  |  data[7]
+
+
+        tmp.append(self.compensate_T(temp_raw))
+        tmp.append(self.compensate_P(pres_raw))
+        tmp.append(self.compensate_H(hum_raw))
         
-        self.compensate_T(temp_raw)
-        self.compensate_P(pres_raw)
-        self.compensate_H(hum_raw)
+        BME280_dict = {
+            'BME280': {
+                'temperature': str(tmp[0]), 
+                'pressure': str(tmp[1]),
+                'hum': str(tmp[2])
+            }
+        }
+
+        return BME280_dict
 
 
 
 def main():
     Senser = BME280()
+    rbuf = RingBuffer(5)
     Senser.get_calib_param()
-    Senser.readData()
+
+    while True:
+        rbuf.add(Senser.readData())
+        rbuf.view_all_data()
+        sleep(2)
 
 
 if __name__ == '__main__':

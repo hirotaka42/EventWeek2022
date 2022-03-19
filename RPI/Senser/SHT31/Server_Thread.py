@@ -143,7 +143,7 @@ def getData()->dict:
     result = GLOBAL_buffer[GLOBAL_bottom-1]
     print("-----------")
     print("-----------")
-    print("Debug:" + "Func:getData()->" + '{}'.format(result))
+    print(f"Debug: >>> Func:getData()-> {result}")
     print("-         -")
     print("-----------")
     return result

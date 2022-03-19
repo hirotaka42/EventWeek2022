@@ -12,7 +12,8 @@ from smbus2 import SMBus
 import threading
 from time import sleep
 
-
+#Jsonのデータ数
+_INFO_SUM = 3
 # リングバッファ参照用 変数
 GLOBAL_buffer = 0
 GLOBAL_bottom = 0
@@ -183,7 +184,7 @@ class BME280:
         pressure = pressure + ((v1 + v2 + self.digP[6]) / 16.0)  
         # f-stringを使用し 桁数.2fで切り取り表示
         print(f"pressure : {pressure/100:.2f} hPa")
-        value = f"{pressure/100:.2f} "
+        value = f"{pressure/100:.2f}"
         return value
 
     def compensate_T(self,adc_T)->str:
@@ -197,7 +198,7 @@ class BME280:
         self.t_fine = v1 + v2
         temperature = self.t_fine / 5120.0
         print(f"temp : {temperature:.2f} 度")
-        value = f"{temperature:.2f} "
+        value = f"{temperature:.2f}"
         return value
 
     def compensate_H(self,adc_H)->str:
@@ -217,7 +218,7 @@ class BME280:
         elif var_h < 0.0:
             var_h = 0.0
         print(f"hum : {var_h:.2f} ％")
-        value = f"{var_h:.2f} "
+        value = f"{var_h:.2f}"
         return value
 
     def readData(self)->dict:
@@ -259,17 +260,72 @@ class BME280:
 
         return BME280_dict
 
-
-
-def main():
+def Thread_Senser():
+    """
+    センサーの値を取得しリングバッファに格納
+    Args : None
+    Return: None
+    """
     Senser = BME280()
     rbuf = RingBuffer(5)
     Senser.get_calib_param()
 
     while True:
         rbuf.add(Senser.readData())
+        # デバッグ
         rbuf.view_all_data()
+        # センサ情報取得時に負荷を軽減させるために取得間隔を開ける
         sleep(2)
+
+def getData()->dict:
+    """
+    リングバッファに格納してある最新のデータを取得する
+    Args   : None
+    Return : 辞書型
+    概要    :
+    関数ThreadSHT31で貯めたデータのうち一番新しいデータを取得し、辞書型で返却する
+    データ内容:
+    {'BME280': {'temperature': '20.95 ', 'pressure': '998.70 ', 'hum': '40.69 '}}
+    """
+    global GLOBAL_buffer
+    global GLOBAL_bottom
+    # クラス RingBufferにおいて新規値を addした後, bottom値を次に切り替えてしまうため、最新の値はbottom値のひとつ前に格納されている
+    result = GLOBAL_buffer[GLOBAL_bottom-1]
+    # デバッグ
+    print("-----------")
+    print("-----------")
+    print(f"Debug: >>> Func:getData()-> {result}")
+    print("-         -")
+    print("-----------")
+    return result
+
+def app(environ, start_response):
+    """
+    """
+    status = '200 OK'
+    headers = [
+        ('Content-type', 'application/json; charset=utf-8'),
+        ('Access-Control-Allow-Origin', '*'),
+    ]
+    start_response(status, headers)
+    # 最新データを
+    senser_dict = getData()
+    return [json.dumps(senser_dict, indent=int(_INFO_SUM), ensure_ascii=False).encode("utf-8")]
+
+def Thread_server_run():
+    """
+    3000番ポートでサーバを起動
+    
+    """
+    with make_server('', 3000, app) as httpd:
+            print("Serving on port 3000...")
+            httpd.serve_forever()
+
+def main():
+    getSenser = threading.Thread(target=Thread_Senser)
+    ApiServer = threading.Thread(target=Thread_server_run)
+    getSenser.start()
+    ApiServer.start()
 
 
 if __name__ == '__main__':

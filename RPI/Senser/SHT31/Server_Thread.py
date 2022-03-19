@@ -20,8 +20,8 @@ bus.write_byte_data(i2c_addr, 0x21, 0x30)
 sleep(1)
 
 
-RINGSIZE = 10
-GLOBAL_buffer = [None for i in range(0, RINGSIZE)]
+# リングバッファ参照用 変数
+GLOBAL_buffer = 0
 GLOBAL_bottom = 0
 
 class RingBuffer:
@@ -30,13 +30,13 @@ class RingBuffer:
     Args : size(int) バッファサイズ
 
     """
-    def __init__(self):
+    def __init__(self, size):
         global GLOBAL_buffer 
         global GLOBAL_bottom
-        global RINGSIZE
+        GLOBAL_buffer = [None for i in range(0, size)]
         self.top = 0
         GLOBAL_bottom = 0
-        self.size = RINGSIZE
+        self.size = size
 
     def __len__(self):
         global GLOBAL_bottom
@@ -101,7 +101,8 @@ def ThreadSHT31():
     """
     global GLOBAL_bottom
     global GLOBAL_buffer
-    rbuf = RingBuffer()
+    # バッファサイズを指定し、リングバッファを作成
+    rbuf = RingBuffer(10)
     
     try:
         while True:
@@ -117,7 +118,6 @@ def ThreadSHT31():
             }
 
             rbuf.add(value)
-            #print(GLOBAL_SHT31)
             sleep(2)
 
     except KeyboardInterrupt:

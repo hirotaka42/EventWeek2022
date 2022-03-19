@@ -1,11 +1,10 @@
-#coding: utf-8
-
 from smbus2 import SMBus
-import time
+from time import sleep
 
 bus_number  = 1
-i2c_address = 0x76
-
+# i2cのアドレス
+i2c_addr = 0x76
+# SMBusモジュールの設定
 bus = SMBus(bus_number)
 
 digT = []
@@ -15,17 +14,24 @@ digH = []
 t_fine = 0.0
 
 
-def writeReg(reg_address, data):
-	bus.write_byte_data(i2c_address,reg_address,data)
+def writeReg(reg_addr, data):
+	"""
+	I2Cに命令を書き込む関数
+	Args:
+	reg_addr-> コマンド,
+	data    -> 書き込みたいデータ,
+
+	"""
+	bus.write_byte_data(i2c_addr,reg_addr,data)
 
 def get_calib_param():
 	calib = []
 	
 	for i in range (0x88,0x88+24):
-		calib.append(bus.read_byte_data(i2c_address,i))
-	calib.append(bus.read_byte_data(i2c_address,0xA1))
+		calib.append(bus.read_byte_data(i2c_addr,i))
+	calib.append(bus.read_byte_data(i2c_addr,0xA1))
 	for i in range (0xE1,0xE1+7):
-		calib.append(bus.read_byte_data(i2c_address,i))
+		calib.append(bus.read_byte_data(i2c_addr,i))
 
 	digT.append((calib[1] << 8) | calib[0])
 	digT.append((calib[3] << 8) | calib[2])
@@ -59,9 +65,12 @@ def get_calib_param():
 			digH[i] = (-digH[i] ^ 0xFFFF) + 1  
 
 def readData():
+	"""
+	センサーのデータブロックからデータの読み込み
+	"""
 	data = []
 	for i in range (0xF7, 0xF7+8):
-		data.append(bus.read_byte_data(i2c_address,i))
+		data.append(bus.read_byte_data(i2c_addr,i))
 	pres_raw = (data[0] << 12) | (data[1] << 4) | (data[2] >> 4)
 	temp_raw = (data[3] << 12) | (data[4] << 4) | (data[5] >> 4)
 	hum_raw  = (data[6] << 8)  |  data[7]
@@ -71,6 +80,12 @@ def readData():
 	compensate_H(hum_raw)
 
 def compensate_P(adc_P):
+	"""
+	気圧を求める関数
+	Args  : adc_P(センサー(気圧部分)のRAWデータ)
+	データ内容:
+	pressure : 997.33 hPa
+	"""
 	global  t_fine
 	pressure = 0.0
 	
@@ -91,18 +106,30 @@ def compensate_P(adc_P):
 	v1 = (digP[8] * (((pressure / 8.0) * (pressure / 8.0)) / 8192.0)) / 4096
 	v2 = ((pressure / 4.0) * digP[7]) / 8192.0
 	pressure = pressure + ((v1 + v2 + digP[6]) / 16.0)  
-
-	print "pressure : %7.2f hPa" % (pressure/100)
+	# f-stringを使用し 桁数.2fで切り取り表示
+	print(f"pressure : {pressure/100:.2f} hPa")
 
 def compensate_T(adc_T):
+	"""
+	気温を求める関数
+	Args  : adc_T(センサー(気温部分)のRAWデータ)
+	データ内容:
+	temp : 21.50 度
+	"""
 	global t_fine
 	v1 = (adc_T / 16384.0 - digT[0] / 1024.0) * digT[1]
 	v2 = (adc_T / 131072.0 - digT[0] / 8192.0) * (adc_T / 131072.0 - digT[0] / 8192.0) * digT[2]
 	t_fine = v1 + v2
 	temperature = t_fine / 5120.0
-	print "temp : %-6.2f ℃" % (temperature) 
+	print(f"temp : {temperature:.2f} 度")
 
 def compensate_H(adc_H):
+	"""
+	湿度を求める関数
+	Args  : adc_H(センサー(湿度部分)のRAWデータ)
+	データ内容:
+	hum :  42.98 ％
+	"""
 	global t_fine
 	var_h = t_fine - 76800.0
 	if var_h != 0:
@@ -114,7 +141,7 @@ def compensate_H(adc_H):
 		var_h = 100.0
 	elif var_h < 0.0:
 		var_h = 0.0
-	print "hum : %6.2f ％" % (var_h)
+	print(f"hum : {var_h:.2f} ％")
 
 
 def setup():
